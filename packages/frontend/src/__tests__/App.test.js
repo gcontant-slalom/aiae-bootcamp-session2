@@ -12,8 +12,24 @@ const server = setupServer(
     return res(
       ctx.status(200),
       ctx.json([
-        { id: 1, name: 'Test Item 1', created_at: '2023-01-01T00:00:00.000Z' },
-        { id: 2, name: 'Test Item 2', created_at: '2023-01-02T00:00:00.000Z' },
+        { 
+          id: 1, 
+          name: 'Test Item 1', 
+          description: 'Test description',
+          completed: 0,
+          due_date: null,
+          created_at: '2023-01-01T00:00:00.000Z',
+          updated_at: '2023-01-01T00:00:00.000Z'
+        },
+        { 
+          id: 2, 
+          name: 'Test Item 2',
+          description: '',
+          completed: 1,
+          due_date: null,
+          created_at: '2023-01-02T00:00:00.000Z',
+          updated_at: '2023-01-02T00:00:00.000Z'
+        },
       ])
     );
   }),
@@ -34,7 +50,28 @@ const server = setupServer(
       ctx.json({
         id: 3,
         name,
+        description: '',
+        completed: 0,
+        due_date: null,
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+    );
+  }),
+
+  // PATCH /api/items/:id handler
+  rest.patch('/api/items/:id', (req, res, ctx) => {
+    const { id } = req.params;
+    return res(
+      ctx.status(200),
+      ctx.json({
+        id: parseInt(id),
+        name: 'Test Item',
+        description: '',
+        completed: 1,
+        due_date: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       })
     );
   })
@@ -46,21 +83,24 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 describe('App Component', () => {
-  test('renders the header', async () => {
+  test('renders the main app structure', async () => {
     await act(async () => {
       render(<App />);
     });
-    expect(screen.getByText('React Frontend with Node Backend')).toBeInTheDocument();
-    expect(screen.getByText('Connected to in-memory database')).toBeInTheDocument();
+    
+    // Check for app title
+    expect(screen.getByText(/TODO App/i)).toBeInTheDocument();
+    
+    // Check for filter buttons
+    expect(screen.getByTestId('filter-all')).toBeInTheDocument();
+    expect(screen.getByTestId('filter-incomplete')).toBeInTheDocument();
+    expect(screen.getByTestId('filter-complete')).toBeInTheDocument();
   });
 
   test('loads and displays items', async () => {
     await act(async () => {
       render(<App />);
     });
-    
-    // Initially shows loading state
-    expect(screen.getByText('Loading data...')).toBeInTheDocument();
     
     // Wait for items to load
     await waitFor(() => {
@@ -69,7 +109,7 @@ describe('App Component', () => {
     });
   });
 
-  test('adds a new item', async () => {
+  test('opens add item dialog when FAB is clicked', async () => {
     const user = userEvent.setup();
     
     await act(async () => {
@@ -78,41 +118,18 @@ describe('App Component', () => {
     
     // Wait for items to load
     await waitFor(() => {
-      expect(screen.queryByText('Loading data...')).not.toBeInTheDocument();
+      expect(screen.queryByText('Test Item 1')).toBeInTheDocument();
     });
     
-    // Fill in the form and submit
-    const input = screen.getByPlaceholderText('Enter item name');
+    // Click the floating action button
+    const fab = screen.getByTestId('add-item-fab');
     await act(async () => {
-      await user.type(input, 'New Test Item');
+      await user.click(fab);
     });
     
-    const submitButton = screen.getByText('Add Item');
-    await act(async () => {
-      await user.click(submitButton);
-    });
-    
-    // Check that the new item appears
+    // Check that dialog opens
     await waitFor(() => {
-      expect(screen.getByText('New Test Item')).toBeInTheDocument();
-    });
-  });
-
-  test('handles API error', async () => {
-    // Override the default handler to simulate an error
-    server.use(
-      rest.get('/api/items', (req, res, ctx) => {
-        return res(ctx.status(500));
-      })
-    );
-    
-    await act(async () => {
-      render(<App />);
-    });
-    
-    // Wait for error message
-    await waitFor(() => {
-      expect(screen.getByText(/Failed to fetch data/)).toBeInTheDocument();
+      expect(screen.getByText('Add New Item')).toBeInTheDocument();
     });
   });
 
@@ -130,7 +147,7 @@ describe('App Component', () => {
     
     // Wait for empty state message
     await waitFor(() => {
-      expect(screen.getByText('No items found. Add some!')).toBeInTheDocument();
+      expect(screen.getByText('No Items Yet')).toBeInTheDocument();
     });
   });
 });

@@ -1,126 +1,267 @@
 import React, { useState, useEffect } from 'react';
-import './App.css';
+import {
+  ThemeProvider,
+  CssBaseline,
+  Container,
+  AppBar,
+  Toolbar,
+  Typography,
+  Fab,
+  Box,
+  Stack,
+  CircularProgress,
+  Snackbar,
+  Alert,
+} from '@mui/material';
+import { Add as AddIcon } from '@mui/icons-material';
+import theme from './theme';
+import { useItems } from './hooks/useItems';
+import { useDebounce } from './hooks/useDebounce';
+import ItemCard from './components/ItemCard';
+import ItemDialog from './components/ItemDialog';
+import ConfirmDialog from './components/ConfirmDialog';
+import FilterSort from './components/FilterSort';
+import EmptyState from './components/EmptyState';
 
 function App() {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [newItem, setNewItem] = useState('');
+  const {
+    items,
+    loading,
+    error,
+    setError,
+    fetchItems,
+    createItem,
+    updateItem,
+    toggleComplete,
+    deleteItem,
+  } = useItems();
 
+  // Dialog states
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+
+  // Filter and sort states
+  const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('created');
+  const [order, setOrder] = useState('desc');
+  const [search, setSearch] = useState('');
+
+  // Success message
+  const [successMessage, setSuccessMessage] = useState('');
+
+  // Debounce search for API calls
+  const debouncedSearch = useDebounce(search, 300);
+
+  // Fetch items when filters change
   useEffect(() => {
-    fetchData();
+    const queryParams = {
+      filter,
+      sort,
+      order,
+    };
+
+    if (debouncedSearch) {
+      queryParams.search = debouncedSearch;
+    }
+
+    fetchItems(queryParams);
+  }, [filter, sort, order, debouncedSearch, fetchItems]);
+
+  // Load saved preferences from localStorage
+  useEffect(() => {
+    const savedFilter = localStorage.getItem('itemFilter');
+    const savedSort = localStorage.getItem('itemSort');
+    const savedOrder = localStorage.getItem('itemOrder');
+
+    if (savedFilter) setFilter(savedFilter);
+    if (savedSort) setSort(savedSort);
+    if (savedOrder) setOrder(savedOrder);
   }, []);
 
-  const fetchData = async () => {
+  // Save preferences to localStorage
+  useEffect(() => {
+    localStorage.setItem('itemFilter', filter);
+    localStorage.setItem('itemSort', sort);
+    localStorage.setItem('itemOrder', order);
+  }, [filter, sort, order]);
+
+  const handleOpenDialog = (item = null) => {
+    setEditingItem(item);
+    setDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    setDialogOpen(false);
+    setEditingItem(null);
+  };
+
+  const handleSaveItem = async (itemData) => {
     try {
-      setLoading(true);
-      const response = await fetch('/api/items');
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
+      if (editingItem) {
+        await updateItem(editingItem.id, itemData);
+        setSuccessMessage('Item updated successfully');
+      } else {
+        await createItem(itemData);
+        setSuccessMessage('Item added successfully');
       }
-      const result = await response.json();
-      setData(result);
-      setError(null);
+      handleCloseDialog();
     } catch (err) {
-      setError('Failed to fetch data: ' + err.message);
-      console.error('Error fetching data:', err);
-    } finally {
-      setLoading(false);
+      // Error is already set in the hook
+      console.error('Error saving item:', err);
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!newItem.trim()) return;
-
+  const handleToggleComplete = async (id) => {
     try {
-      const response = await fetch('/api/items', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: newItem }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to add item');
-      }
-
-      const result = await response.json();
-      setData([...data, result]);
-      setNewItem('');
+      await toggleComplete(id);
     } catch (err) {
-      setError('Error adding item: ' + err.message);
-      console.error('Error adding item:', err);
+      console.error('Error toggling item:', err);
     }
   };
 
-  const handleDelete = async (itemId) => {
+  const handleDeleteClick = (id) => {
+    setItemToDelete(id);
+    setConfirmDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
     try {
-      const response = await fetch(`/api/items/${itemId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete item');
-      }
-
-      setData(data.filter(item => item.id !== itemId));
-      setError(null);
+      await deleteItem(itemToDelete);
+      setSuccessMessage('Item deleted successfully');
+      setConfirmDialogOpen(false);
+      setItemToDelete(null);
     } catch (err) {
-      setError('Error deleting item: ' + err.message);
       console.error('Error deleting item:', err);
     }
   };
 
+  const handleCancelDelete = () => {
+    setConfirmDialogOpen(false);
+    setItemToDelete(null);
+  };
+
+  const handleSortChange = (newSort, newOrder) => {
+    setSort(newSort);
+    setOrder(newOrder);
+  };
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>To Do App</h1>
-        <p>Keep track of your tasks</p>
-      </header>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default' }}>
+        {/* App Bar */}
+        <AppBar position="static" elevation={0}>
+          <Toolbar>
+            <Typography variant="h1" component="h1" sx={{ fontSize: 24 }}>
+              📝 TODO App
+            </Typography>
+          </Toolbar>
+        </AppBar>
 
-      <main>
-        <section className="add-item-section">
-          <h2>Add New Item</h2>
-          <form onSubmit={handleSubmit}>
-            <input
-              type="text"
-              value={newItem}
-              onChange={(e) => setNewItem(e.target.value)}
-              placeholder="Enter item name"
-            />
-            <button type="submit">Add Item</button>
-          </form>
-        </section>
+        {/* Main Content */}
+        <Container maxWidth="lg" sx={{ py: 4 }}>
+          {/* Filter and Sort Controls */}
+          <FilterSort
+            filter={filter}
+            sort={sort}
+            order={order}
+            search={search}
+            onFilterChange={setFilter}
+            onSortChange={handleSortChange}
+            onSearchChange={setSearch}
+          />
 
-        <section className="items-section">
-          <h2>Items from Database</h2>
-          {loading && <p>Loading data...</p>}
-          {error && <p className="error">{error}</p>}
-          {!loading && !error && (
-            <ul>
-              {data.length > 0 ? (
-                data.map((item) => (
-                  <li key={item.id}>
-                    <span>{item.name}</span>
-                    <button 
-                      onClick={() => handleDelete(item.id)}
-                      className="delete-btn"
-                      type="button"
-                    >
-                      Delete
-                    </button>
-                  </li>
-                ))
-              ) : (
-                <p>No items found. Add some!</p>
-              )}
-            </ul>
+          {/* Items List or Loading/Empty State */}
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+              <CircularProgress />
+            </Box>
+          ) : items.length === 0 ? (
+            <EmptyState onAddClick={() => handleOpenDialog()} />
+          ) : (
+            <Stack spacing={2}>
+              {items.map((item) => (
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  onToggleComplete={handleToggleComplete}
+                  onEdit={handleOpenDialog}
+                  onDelete={handleDeleteClick}
+                />
+              ))}
+            </Stack>
           )}
-        </section>
-      </main>
-    </div>
+        </Container>
+
+        {/* Floating Action Button */}
+        <Fab
+          color="primary"
+          aria-label="add item"
+          onClick={() => handleOpenDialog()}
+          data-testid="add-item-fab"
+          sx={{
+            position: 'fixed',
+            bottom: 32,
+            right: 32,
+          }}
+        >
+          <AddIcon />
+        </Fab>
+
+        {/* Item Dialog */}
+        <ItemDialog
+          open={dialogOpen}
+          item={editingItem}
+          onClose={handleCloseDialog}
+          onSave={handleSaveItem}
+        />
+
+        {/* Confirm Delete Dialog */}
+        <ConfirmDialog
+          open={confirmDialogOpen}
+          title="Delete Item?"
+          message="Are you sure you want to delete this item? This action cannot be undone."
+          onConfirm={handleConfirmDelete}
+          onCancel={handleCancelDelete}
+        />
+
+        {/* Success Snackbar */}
+        <Snackbar
+          open={!!successMessage}
+          autoHideDuration={3000}
+          onClose={() => setSuccessMessage('')}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        >
+          <Alert
+            onClose={() => setSuccessMessage('')}
+            severity="success"
+            variant="filled"
+            sx={{ backgroundColor: '#C8E6C9', color: '#6B6B6B' }}
+          >
+            {successMessage}
+          </Alert>
+        </Snackbar>
+
+        {/* Error Snackbar */}
+        <Snackbar
+          open={!!error}
+          autoHideDuration={4000}
+          onClose={() => setError(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        >
+          <Alert
+            onClose={() => setError(null)}
+            severity="error"
+            variant="filled"
+            sx={{ backgroundColor: '#FFB3B3', color: '#6B6B6B' }}
+          >
+            {error}
+          </Alert>
+        </Snackbar>
+      </Box>
+    </ThemeProvider>
   );
 }
 
